@@ -1,0 +1,85 @@
+#!/bin/bash
+
+# Specific to my board with my use of fans
+# P8Z77-V Pro
+
+run() {
+	tmpfile=/tmp/.sensors_unique.txt	# temp output
+	verbose=/tmp/.verbose_unique.txt	# verbose temp output with three decimals
+	logfile=/scratch/unique.csv				# data file to write
+
+	sensors >$tmpfile && sensors -u >$verbose
+
+	phys=$(grep Physical $tmpfile | cut -c 18-21)
+	c0=$(grep "Core 0" $tmpfile | cut -c18-21)
+	c1=$(grep "Core 1" $tmpfile | cut -c18-21)
+	c2=$(grep "Core 2" $tmpfile | cut -c18-21)
+	c3=$(grep "Core 3" $tmpfile | cut -c18-21)
+
+	vcc=$(grep in0_input $verbose | cut -c14-18)
+
+	fan1=$(grep fan1 $tmpfile | cut -c24-27)
+	pwm1=$(cat /sys/class/hwmon/hwmon3/device/pwm1)
+	per1=$(echo "scale=2; $pwm1/2.55" | bc)
+
+	fan3=$(grep fan3 $tmpfile | cut -c24-27)
+	pwm3=$(cat /sys/class/hwmon/hwmon3/device/pwm3)
+	per3=$(echo "scale=2; $pwm3/2.55" | bc)
+
+	fan4=$(grep fan4 $tmpfile | cut -c24-27)
+	pwm4=$(cat /sys/class/hwmon/hwmon3/device/pwm4)
+	per4=$(echo "scale=2; $pwm4/2.55" | bc)
+
+	fan5=$(grep fan5 $tmpfile | cut -c24-27)
+	pwm5=$(cat /sys/class/hwmon/hwmon3/device/pwm5)
+	per5=$(echo "scale=2; $pwm5/2.55" | bc)
+
+	dts=$(date +"%m-%d-%y %r")
+
+	if [[ "$LOGGING" = "Y" ]]; then	
+		[[ ! -f $logfile ]] && echo "dts,vcc,temp,core0,core1,core2,core3,120mm_rpm,120mm_pwm,140mm_rpm,140mm_pwm,comment" > $logfile
+
+		echo "$dts,$vcc,$phys,$c0,$c1,$c2,$c3,$fan4,$pwm4,$fan5,$pwm5,$comment" >> $logfile
+	fi
+
+	if [[ -n "$output" ]]; then
+		echo "Vcore : $vcc"
+		echo "back  : $fan1 ($pwm1/255) = $per1 %"
+		echo "top   : $fan3 ($pwm3/255) = $per3 %"
+		echo "120mm : $fan4 ($pwm4/255) = $per4 %"
+		echo "140mm : $fan5 ($pwm5/255) = $per5 %"
+	fi
+}
+
+case "$1" in
+	s)
+		export LOGGING="Y"
+		limit=86400                 # number of times to run
+		wait=2                      # delay in sec before taking a new reading
+		x=0
+		while [ "$x" -lt "$limit" ]; do
+			x=$(( $x + 1 ))
+			run
+			sleep "$wait"s
+		done
+		;;
+	l)
+		export output="not null"
+		export LOGGING="Y"
+		export -f run
+		/usr/bin/watch run
+		;;
+	v)
+		export output="not null"
+		export -f run
+		/usr/bin/watch run
+		;;
+	*)
+		echo "usage $0 {s|v|l}"
+		echo
+		echo "s) silent mode/logfile only"
+		echo "l) verbose mode/logfile + output"
+		echo "v) verbose mode/output only"
+		exit 0
+		;;
+esac

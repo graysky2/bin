@@ -1,0 +1,91 @@
+#!/bin/bash
+export nowstamp=$(date "+%Y%m%d%H%M")
+run="xxx"
+temp="temp"
+mprimetime=30
+cpuburntime=12
+
+[[ -z "$1" ]] || run="$1"
+[[ -z "$2" ]] || temp="$2"
+
+logpath=/scratch
+log=$logpath/newlog-part-$nowstamp.csv
+permlog=newlog.csv
+
+[[ ! -f ~/$permlog ]] &&
+	echo "record,date,core0,core1,core2,core3,vcore,pwm2,fan2,time,ambient,mount" >> ~/$permlog
+
+gologger() {
+	record=0
+	while [ 1 ]; do
+		record=$(( $record + 1 ))
+		now=$(date "+%F %T")
+		in0=$(cat /sys/class/hwmon/hwmon1/in0_input)
+		cpu0=$(cat /sys/class/hwmon/hwmon0/device/hwmon/hwmon0/temp2_input|cut -c1,2)
+		cpu1=$(cat /sys/class/hwmon/hwmon0/device/hwmon/hwmon0/temp3_input|cut -c1,2)
+		cpu2=$(cat /sys/class/hwmon/hwmon0/device/hwmon/hwmon0/temp4_input|cut -c1,2)
+		cpu3=$(cat /sys/class/hwmon/hwmon0/device/hwmon/hwmon0/temp5_input|cut -c1,2)
+		pwm2=$(cat /sys/class/hwmon/hwmon1/pwm2)
+		fan2=$(cat /sys/class/hwmon/hwmon1/fan2_input)
+
+		echo $record,$now,$cpu0,$cpu1,$cpu2,$cpu3,$(echo "scale=4; $in0/1000"|bc -l),$fan2,$pwm2,$run,$temp,$stresser >> $log
+		sleep 1s
+	done
+}
+
+[[ -n $(pidof systester-cli) ]] && killall systester-cli
+[[ -n $(pidof make) ]] && killall make
+[[ -n $(pidof gcc) ]] && killall gcc
+[[ -n $(pidof burnP6) ]] && killall burnP6
+[[ -n $(pidof mprime) ]] && killall mprime
+
+gomprime() {
+	### mprime
+	mprime -t >> $HOME/mprime.log &
+
+	stresser="mprime-440k"
+	gologger &
+	LOGGERPID=$!
+
+	sleep "$mprimetime"m
+	kill $LOGGERPID &>/dev/null
+	killall mprime &>/dev/null
+}
+
+goburnp6() {
+	### burnP6
+	burnP6 &
+	burnP6 &
+	burnP6 &
+	burnP6 &
+	burnP6 &
+	burnP6 &
+	burnP6 &
+	burnP6 &
+
+	stresser="burnP6"
+	gologger &
+	LOGGERPID=$!
+
+	echo $nowstamp >> ~/cpuburnP6.log
+	sleep "$cpuburntime"m
+	killall burnP6 &>/dev/null
+	kill $LOGGERPID &>/dev/null
+}
+
+echo "running 8x cpuburnP6 for $cpuburntime minutes"
+goburnp6
+echo "cooling down"
+sleep 10s
+echo "running mprime for $mprimetime minutes"
+gomprime
+echo "done"
+
+if [[ -f $log ]]; then
+	sed '1d' $log > ~/newlog-part-$nowstamp.csv
+	
+	cp ~/$permlog /tmp
+	cat /tmp/$permlog $log > ~/$permlog
+	[[ -f /tmp/$permlog ]] && rm -f /tmp/$permlog
+fi
+

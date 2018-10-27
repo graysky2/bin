@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Define the port on which the vncserver shall run. 5900 is assumed so 1 = 5901
+# 2 = 5902 etc.
+PORT=1
+
+case "$1" in
+  u)
+    if ! systemctl --user -q is-active vncserver@:$PORT; then
+      systemctl --user start vncserver@:$PORT
+    else
+      exit 1
+    fi
+    ;;
+  d)
+    if systemctl --user -q is-active vncserver@:$PORT; then
+      systemctl --user stop vncserver@:$PORT
+    else
+      exit 1
+    fi
+    ;;
+  *)
+    echo "usage: $0 {u,d}"
+    ;;
+esac
+exit 0
+
+# vim:set ts=2 sw=2 et:

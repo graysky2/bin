@@ -1,0 +1,108 @@
+#!/bin/bash
+# script will build package in target dir for both x86_64 and i686
+# and manage a local repo
+#
+# user must have 32-bit chroot setup and configured or else the i686 build will fail
+[[ ! -f "$HOME"/bin/pretty ]] && echo "missing $HOME/bin/pretty" && exit 1
+. "$HOME"/bin/pretty
+NAME=serenity.lan
+temprepo="/scratch/router"
+
+[[ ! -f "$HOME"/bin/repo/makepkg.x86_64 ]] && echo "Missing template makepkg.conf for x86_64" && exit 1
+sed -e '/graysky/d' -e '/GPGKEY/d' ~/bin/repo/makepkg.x86_64 > "$XDG_RUNTIME_DIR"/makepkg.x86_64
+
+deploy() {
+  for pkg in "${pkgname[@]}"; do
+    # delete old pkg versions from repo
+    rm -f $temprepo/x86_64/"$pkg"*.pkg.tar.xz
+
+    # move in the new version to the repo
+    mv "$pkg"*.pkg.tar.xz "$temprepo/x86_64"
+  done
+
+  stat_busy "Reindexing repo"
+  if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.xz &>/dev/null; then
+    stat_die
+  else
+    true
+    stat_done
+  fi
+
+  stat_busy "Rsyncing x86_64 back to router"
+  if ! rsync -rLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+    stat_die
+  else
+    true
+    stat_done
+  fi
+}
+
+build64() {
+  makepkg -srcf --config "$XDG_RUNTIME_DIR"/makepkg.x86_64
+}
+
+chrootbuild64() {
+  sudo ccm64 S || stat die
+}
+
+# here is the script
+start=$(pwd)
+[[ ! -d "$temprepo" ]] && mkdir -p "$temprepo"
+
+stat_busy "Grabbing files from router"
+if ! rsync -rLxDu --password-file ~/bin/makepkg/.generic $NAME::repo/ "$temprepo"/ &>/dev/null; then
+  msg "rsync is not responding so quitting."
+  stat_die
+else
+  true
+  stat_done
+fi
+
+# build all x86_64 only
+
+if [[ -f PKGBUILD ]]; then
+  . PKGBUILD
+    [[ $(pwd) != "$start" ]] &&  { cd "$start" || exit 1 ;}
+    case "$i" in
+      any)
+        # build in native 64-bit env since it is an any package and does not matter
+        msg "Building the any package..."
+        chrootbuild64
+        deploy
+
+        rm -rf "$temprepo"
+        exit 0
+        ;;
+      *)
+        msg "Building the x86_64 package..."
+        chrootbuild64
+        deploy
+    esac
+else
+  echo "Add or remove packages from $temprepo/x86_64"
+  read -r -p "Then hit any key to reindex and resync back." response
+  case "$response" in
+    *)
+      stat_busy "Reindexing x86_64 repo"
+      rm -f "$temprepo"/x86_64/router*
+      if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.xz &>/dev/null; then
+        stat_die
+      else
+        true
+        stat_done
+      fi
+
+      stat_busy "Rsyncing x86_64 back to router"
+      if ! rsync -rLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+        stat_die
+      else
+        true
+        stat_done
+      fi
+      rm -rf "$temprepo"
+      exit 0
+      ;;
+  esac
+fi
+
+# vim:set ts=2 sw=2 et:

@@ -1,0 +1,40 @@
+#!/bin/bash
+work=/scratch
+repo=/mnt/data/bench
+dryrun=y
+target=linux-4.0.9
+threads=9
+
+XSRUNNING=$(pidof xscreensaver)
+[[ -n "$XSRUNNING" ]] && kill "$XSRUNNING"
+
+[[ ! -d $work/$target ]] && tar xf $repo/$target.tar -C $work
+[[ ! -f $repo/make_stats.csv ]] && echo "run,target,makeflags,comment,time (sec)" > $repo/make_stats.csv
+cd $work/$target
+
+if [[ -n "dryrun" ]]; then
+	# dryrun
+	make clean &>/dev/null
+	start=$(date +%s.%N)
+	echo 'dry run'
+	make -j$threads bzImage &>/dev/null
+	end=$(date +%s.%N)
+	diff=$(echo "scale=6; $end - $start" | bc)
+	echo "dry run took $diff seconds"
+	sudo sysctl --write vm.drop_caches=3 &>/dev/null
+fi
+
+for MAKEFLAGS in 3 4 5 6; do
+	for n in 1 2 3; do
+		make clean &>/dev/null
+		RUNDATE=$(date "+%F %T")
+		start=$(date +%s.%N)
+		make -j$MAKEFLAGS bzImage &>/dev/null
+		end=$(date +%s.%N)
+		diff=$(echo "scale=6; $end - $start" | bc)
+		echo "run $n took $diff seconds using $MAKEFLAGS threads"
+		echo "$n,$target,$MAKEFLAGS,$CPU,$diff" >> $repo/make_stats.csv
+		sudo sysctl --write vm.drop_caches=3 &>/dev/null
+	done
+done
+

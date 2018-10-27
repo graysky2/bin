@@ -1,0 +1,58 @@
+#!/bin/bash
+test_path="/mnt/data/bench" # location of files on physical disk
+ramdisk="/tmp" # where to do the test - select a ramdisk (tmpfs) to min hdd usage
+source="htop-1.0.2" # name of the tarball containing the preconfigured htop source
+format="gz" # valid options are gz xz and null
+
+limit=10  # number of times to run benchmark knowing that the first run will be dropped (warm up)
+MAKEFLAGS=2 # make flags 
+
+#####
+
+do_make() {
+	NAME=$(uname -r)
+	bfs_v=$(dmesg | grep 'BFS CPU' | cut -c34-39)
+	echo "Running Make..."
+	echo "Kernel: $NAME"
+	echo "Scheduler: $bfs_v"
+	echo
+	echo "Unpacking source..."
+	[[ ! -d "$ramdisk/$source" ]] ; tar zxf "$test_path/$source.tar.$format" -C "$ramdisk"
+	cd "$ramdisk/$source"
+	[[ -z "$bfs_v" ]] && bfs_v="cfs"
+	[[ ! -f "$test_path/results.csv" ]] && echo "run #,hostname,kernel,time(sec),scheduler,date" > "$test_path/results.csv"
+	x=0
+	echo "Starting benchmark; status will update as benchmark progresses."
+	while [ $x -lt $limit ]; do
+		x=$(( $x + 1 ))
+		make clean &>/dev/null
+		RUNDATE=$(date "+%F %T")
+
+		start=$(date +%s.%N)
+		make -j$MAKEFLAGS &>/dev/null
+		end=$(date +%s.%N)
+
+		diff=$(echo "scale=6; $end - $start" | bc)
+		simpdiff=$(echo "scale=2; $end - $start" | bc)
+		runsleft=$(echo "scale=2; $limit-$x"| bc)
+		secleft=$(echo "scale=2; $runsleft*$diff"|bc)
+		minleft=$(echo "scale=2; $runsleft*$diff/60"|bc)
+		eta=$(date -d "($date) $secleft sec" +%r)
+		echo "Run $x/$limit took $simpdiff seconds. ETA: $eta or about $minleft min from now."
+
+		if [[ x -eq 1 ]]; then
+			/bin/true # do not report the warmup run
+		else
+			echo "$x,$HOSTNAME,$NAME,$diff,$bfs_v,$RUNDATE" >> $test_path/results.csv
+		fi
+	done
+	cd "$ramdisk" && rm -rf "$ramdisk/$source" # cleanup
+	echo
+	echo "Benchmark done. Find results in $test_path/results.csv"
+}
+
+[[ -z $(which gcc) ]] && echo "Install base-devel group to allow for make benchmark." && exit 0
+[[ -z $(which bc) ]] && echo "Install bc to allow calculations." && exit 0
+[[ ! -d $ramdisk ]] && mkdir -p $ramdisk
+
+do_make
