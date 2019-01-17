@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# Helper for armv7h and armv6h clean-chroot builds
+# Requires the following (does not check for these):
+# * devtools-alarm on the RPi for distcc building
+# * manually created distccd6.service and distccd7.service on the RPi3 defining the expected ports 
+# * Setup and running distccd-alarm (AUR) on x86_64 server
+# * An NFS export on x86_64 server
+
+# define the mount point on the RPi3 for building which is expected to be an nfs export
+MOUNTPOINT=/scratch
+
+# the servername exporting the nfs build space
+SERVER=ease.lan
+
+setup() {
+  # these three should be passed by this script to this function so fail if they are not
+  for var in "$NUMBER" "$PORT" "$PACMANCONF" "$CACHEDIR"; do
+    [[ -n $var ]] || { echo "    $var is not defined so exiting"; exit 1; }
+  done
+
+  [[ ! -d "$MOUNTPOINT/armc$NUMBER" ]] && mkdir "$MOUNTPOINT/armc$NUMBER"
+  systemctl is-active -q distccd"$NUMBER" || systemctl start distccd"$NUMBER"
+
+  # If the root isn't present make it 
+  if [[ ! -d "$MOUNTPOINT/armc$NUMBER/root" ]]; then
+    echo "--> No chroot detected so build one..."
+    mkarchroot -C "$PACMANCONF" -c "$CACHEDIR" "$MOUNTPOINT/armc$NUMBER/root" base-devel distcc || exit 1
+
+    sed -i -e 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j10"/' \
+      -i -e '/^BUILDENV=/ s,!dist,dist,' \
+      -i -e "/^#DISTCC_HOSTS=/ s,\",\"10.1.9.128:$PORT," \
+      -i -e "s/^#DIS/DIS/" \
+      -i -e 's/-fstack-protector-strong //g' \
+      -i -e 's/#PACKAGER="John Doe <john@doe.com>"/PACKAGER="graysky <graysky AT archlinux DOT us>"/' \
+      -i -e '/^PKGEXT=/ s,tar.xz,tar,' "$MOUNTPOINT/armc$NUMBER/root/etc/makepkg.conf" || exit 1
+
+    # use my mirrorlist
+    cp /etc/pacman.d/mirrorlist "$MOUNTPOINT"/armc"$NUMBER"/root/etc/pacman.d
+  else
+    # there must be a root so update it first
+    echo "--> Found a chroot so updating it..."
+    arch-nspawn -c "$CACHEDIR" -C "/tmp/pac$NUMBER.conf" "$MOUNTPOINT"/armc"$NUMBER"/root pacman -Syu --noconfirm
+  fi
+}
+
+usage() {
+  echo
+  echo " --> All setup! To build:"
+  echo " --> MAKEFLAGS=-j10 makechrootpkg -C $CACHEDIR -r $MOUNTPOINT/armc$NUMBER"
+}
+
+if [ $UID != "0" ]; then
+  echo "You must run this script as root." 1>&2
+  exit 1
+fi
+
+[[ -f /sys/devices/system/cpu/cpufreq/policy0/scaling_governor ]] &&
+  echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+
+if ! mountpoint -q "$MOUNTPOINT"; then
+  mount "$SERVER:/scratch" "$MOUNTPOINT" || exit 1
+fi
+
+case "$1" in
+  6) export NUMBER=6 PORT=3634 PACMANCONF=/tmp/pac6.conf CACHEDIR=/var/cache/pacman/pkg6
+    sed -e '/Architecture =/ s,7h,6h,' /etc/pacman.conf > /tmp/pac6.conf
+    setup
+    usage
+    ;;
+  7) export NUMBER=7 PORT=3635 PACMANCONF=/tmp/pac7.conf CACHEDIR=/var/cache/pacman/pkg
+    cp /etc/pacman.conf /tmp/pac7.conf
+    setup
+    usage
+    ;;
+  8) export NUMBER=8 PORT=3636 PACMANCONF=/tmp/pac8.conf CACHEDIR=/var/cache/pacman/pkg
+    cp /etc/pacman.conf /tmp/pac8.conf
+    setup
+    usage
+    ;;
+  *) echo "usage: $0 {6,7,8}" ;;
+esac
+exit 0
+# vim:set ts=2 sw=2 et:

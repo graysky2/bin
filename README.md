@@ -3,6 +3,7 @@ The following scripts have been referenced in publications and are freely availa
 
  File | Description | Reference |
  --- | --- | --- |
+ [arm-build](https://github.com/graysky2/bin/blob/master/arm-build) | Setup and build armv6h and armv7h in clean-chroots using distcc-alarm and devtools-alarm. | |
  [bench](https://github.com/graysky2/bin/blob/master/bench) | Runs gcc, ffmpeg, and lrzip stressing and benchmarking. | [cpu schedulers compared](http://repo-ck.com/bench/cpu_schedulers_compared.pdf) 
  [cpuz](https://github.com/graysky2/bin/blob/master/cpuz) | Script to harvest temp, voltage, and fan speed data. | [IvyBridge 3770K IHS Removal and Results](http://www.silentpcreview.com/IvyBridge_3770K_IHS_removal_and_results) 
 [ciphertest.sh](https://github.com/graysky2/bin/blob/master/ciphertest.sh) | Script to preform a test of file transfer throughput using scp/rsync to determine which cipher is best for a particular pair of PCs. | [Speed-up rsync and scp xfers on a Lan - choice of cipher is key!](https://bbs.archlinux.org/viewtopic.php?id=136713) 
