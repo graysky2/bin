@@ -7,6 +7,7 @@
 . "$HOME"/bin/pretty
 NAME=serenity.lan
 temprepo="/scratch/router"
+archive=zst
 
 [[ ! -f "$HOME"/bin/repo/makepkg.x86_64 ]] && echo "Missing template makepkg.conf for x86_64" && exit 1
 sed -e '/graysky/d' -e '/GPGKEY/d' ~/bin/repo/makepkg.x86_64 > "$XDG_RUNTIME_DIR"/makepkg.x86_64
@@ -14,14 +15,14 @@ sed -e '/graysky/d' -e '/GPGKEY/d' ~/bin/repo/makepkg.x86_64 > "$XDG_RUNTIME_DIR
 deploy() {
   for pkg in "${pkgname[@]}"; do
     # delete old pkg versions from repo
-    rm -f $temprepo/x86_64/"$pkg"*.pkg.tar.xz
+    rm -f $temprepo/x86_64/"$pkg"*.pkg.tar.$archive
 
     # move in the new version to the repo
-    mv "$pkg"*.pkg.tar.xz "$temprepo/x86_64"
+    mv "$pkg"*.pkg.tar.$archive "$temprepo/x86_64"
   done
 
   stat_busy "Reindexing repo"
-  if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.xz &>/dev/null; then
+  if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.$archive &>/dev/null; then
     stat_die
   else
     true
@@ -85,7 +86,7 @@ else
     *)
       stat_busy "Reindexing x86_64 repo"
       rm -f "$temprepo"/x86_64/router*
-      if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.xz &>/dev/null; then
+      if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.$archive &>/dev/null; then
         stat_die
       else
         true
