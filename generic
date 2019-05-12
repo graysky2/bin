@@ -30,7 +30,7 @@ deploy() {
   fi
 
   stat_busy "Rsyncing x86_64 back to router"
-  if ! rsync -rLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+  if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
     stat_die
   else
     true
@@ -51,7 +51,7 @@ start=$(pwd)
 [[ ! -d "$temprepo" ]] && mkdir -p "$temprepo"
 
 stat_busy "Grabbing files from router"
-if ! rsync -rLxDu --password-file ~/bin/makepkg/.generic $NAME::repo/ "$temprepo"/ &>/dev/null; then
+if ! rsync -trLxDu --password-file ~/bin/makepkg/.generic $NAME::repo/ "$temprepo"/ &>/dev/null; then
   msg "rsync is not responding so quitting."
   stat_die
 else
@@ -94,7 +94,7 @@ else
       fi
 
       stat_busy "Rsyncing x86_64 back to router"
-      if ! rsync -rLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+      if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
         stat_die
       else
         true
