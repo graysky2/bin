@@ -9,9 +9,6 @@ NAME=serenity.lan
 temprepo="/scratch/router"
 archive=zst
 
-[[ ! -f "$HOME"/bin/repo/makepkg.x86_64 ]] && echo "Missing template makepkg.conf for x86_64" && exit 1
-sed -e '/graysky/d' -e '/GPGKEY/d' ~/bin/repo/makepkg.x86_64 > "$XDG_RUNTIME_DIR"/makepkg.x86_64
-
 deploy() {
   for pkg in "${pkgname[@]}"; do
     # delete old pkg versions from repo
@@ -36,10 +33,6 @@ deploy() {
     true
     stat_done
   fi
-}
-
-build64() {
-  makepkg -srcf --config "$XDG_RUNTIME_DIR"/makepkg.x86_64
 }
 
 chrootbuild64() {
