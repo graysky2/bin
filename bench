@@ -1,22 +1,20 @@
 #!/bin/bash
 
 # location of files on physical disk and where results will be written
-test_path="~"
+test_path="$HOME"
 
 # where to do the test - using tmpfs is HIGHLY recommended
-ramdisk="/scratch/bench"
+ramdisk="/scratch"
 
 # name of the dir containing the preconfigured linux source
-source="linux-4.9"
+source="linux-4.4.248"
 
-# number of times to run echo benchmark
-limit="36"
-
-# number of make flags which should be one more than the physical+virtual cores
-MAKEFLAGS="9"
-NAME=$(uname -r)
+# number of times to run benchmark
+limit="2"
 
 #####
+[[ ! -d "$ramdisk" ]] && mkdir -p "$ramdisk"
+[[ ! -f "$test_path"/results.csv ]] && echo "makeflags,n,diff (sec),run date" > "$test_path"/results.csv
 
 calc() {
 	diff=$(echo "scale=6; $finish - $start" | bc)
@@ -26,35 +24,30 @@ calc() {
 	minleft=$(echo "scale=2; $runsleft*$diff/60"|bc)
 	eta=$(date -d "($date) $secleft sec" +%r)
 	echo "Run $x/$limit took $simpdiff seconds. ETA: $eta or about $minleft min from now."
-	echo "$x,$RUNDATE,$HOSTNAME,$MAKEFLAGS,$NAME,$diff,$BENCH" >> "$test_path/results.csv"
+	echo "-j$i,$x,$diff,$RUNDATE" >> "$test_path/results.csv"
 }
 
 do_make() {
-	BENCH=make
-	echo "Running Make..."
-	[[ ! -d $ramdisk/$source ]] &&
-		tar xf "$test_path/$source.tar" -C "$ramdisk"
+	[[ ! -d $ramdisk/$source ]] && tar axf "$test_path/$source.tar.zst" -C "$ramdisk"
 	cd "$ramdisk/$source" || exit
-	x=0
-	while [[ "$x" -lt "$limit" ]]; do
-		x=$(( x + 1 ))
-		make clean &>/dev/null
-		RUNDATE=$(date "+%F %T")
-		start=$(date +%s.%N)
-		make -j"$MAKEFLAGS" bzImage &>/dev/null
-		finish=$(date +%s.%N)
-		calc
-	done
-	rm -rf "$ramdisk/$source"
-}
 
-XSRUNNING=$(pidof xscreensaver)
-[[ -n "$XSRUNNING" ]] && kill "$XSRUNNING"
-[[ -z $(which bc) ]] && echo "Install bc to allow calculations." && exit 0
-[[ -z $(which gcc) ]] && echo "Install base-devel group to allow for make benchmark." && exit 0
-[[ ! -d "$ramdisk" ]] && mkdir -p "$ramdisk"
-[[ ! -f "$test_path"/results.csv ]] &&
-	echo "run #,run date,hostname,makeflags,kernel,time(sec),benchmark" \
-	> "$test_path/results.csv"
+	for i in 9 11; do
+		x=0
+		# n= limit for each makeflag
+		while [[ "$x" -lt "$limit" ]]; do
+			x=$(( x + 1 ))
+			make -j9 clean &>/dev/null
+			RUNDATE=$(date "+%F %T")
+			start=$(date +%s.%N)
+			unset DISTCC_HOSTS
+
+			export DISTCC_HOSTS=""
+			sleep 1s
+			#make -j"$i" bzImage CC=distcc CXX=distcc &>/dev/null
+			finish=$(date +%s.%N)
+			calc
+		done
+	done
+}
 
 do_make
