@@ -1,4 +1,5 @@
 #!/bin/bash
+# vim:set ts=2 sw=2 et:
 
 # location of files on physical disk and where results will be written
 test_path="$HOME"
@@ -7,47 +8,45 @@ test_path="$HOME"
 ramdisk="/scratch"
 
 # name of the dir containing the preconfigured linux source
-source="linux-4.4.248"
+source="linux-4.4.260"
 
 # number of times to run benchmark
-limit="2"
+limit="9"
 
 #####
 [[ ! -d "$ramdisk" ]] && mkdir -p "$ramdisk"
-[[ ! -f "$test_path"/results.csv ]] && echo "makeflags,n,diff (sec),run date" > "$test_path"/results.csv
+[[ ! -f "$test_path"/results.csv ]] && echo "n,diff (sec),run date" > "$test_path"/results.csv
 
 calc() {
-	diff=$(echo "scale=6; $finish - $start" | bc)
-	simpdiff=$(echo "scale=2; $finish - $start" | bc)
-	runsleft=$(echo "scale=2; $limit-$x"| bc)
-	secleft=$(echo "scale=2; $runsleft*$diff"|bc)
-	minleft=$(echo "scale=2; $runsleft*$diff/60"|bc)
-	eta=$(date -d "($date) $secleft sec" +%r)
-	echo "Run $x/$limit took $simpdiff seconds. ETA: $eta or about $minleft min from now."
-	echo "-j$i,$x,$diff,$RUNDATE" >> "$test_path/results.csv"
+  diff=$(echo "scale=6; $finish - $start" | bc)
+  simpdiff=$(echo "scale=2; $finish - $start" | bc)
+  runsleft=$(echo "scale=2; $limit-$x"| bc)
+  secleft=$(echo "scale=2; $runsleft*$diff"|bc)
+  minleft=$(echo "scale=2; $runsleft*$diff/60"|bc)
+  eta=$(date -d "($date) $secleft sec" +%r)
+  echo "Run $x/$limit took $simpdiff seconds. ETA: $eta or about $minleft min from now."
+  echo "$x,$diff,$RUNDATE,xxx" >> "$test_path/results.csv"
 }
 
 do_make() {
-	[[ ! -d $ramdisk/$source ]] && tar axf "$test_path/$source.tar.zst" -C "$ramdisk"
-	cd "$ramdisk/$source" || exit
+  [[ ! -d $ramdisk/$source ]] && tar axf "$test_path/$source.tar" -C "$ramdisk"
+  cd "$ramdisk/$source" || exit
 
-	for i in 9 11; do
-		x=0
-		# n= limit for each makeflag
-		while [[ "$x" -lt "$limit" ]]; do
-			x=$(( x + 1 ))
-			make -j9 clean &>/dev/null
-			RUNDATE=$(date "+%F %T")
-			start=$(date +%s.%N)
-			unset DISTCC_HOSTS
-
-			export DISTCC_HOSTS=""
-			sleep 1s
-			#make -j"$i" bzImage CC=distcc CXX=distcc &>/dev/null
-			finish=$(date +%s.%N)
-			calc
-		done
-	done
+  x=0
+  # n= limit for each makeflag
+  while [[ "$x" -lt "$limit" ]]; do
+    x=$(( x + 1 ))
+    make -j9 clean &>/dev/null
+    RUNDATE=$(date "+%F %T")
+    start=$(date +%s.%N)
+    unset DISTCC_HOSTS
+    export DISTCC_HOSTS=""
+    sleep 1s
+    make -j bzImage &>/dev/null
+    #make -j"$i" bzImage CC=distcc CXX=distcc &>/dev/null
+    finish=$(date +%s.%N)
+    calc
+  done
 }
 
 do_make
