@@ -1,21 +1,20 @@
 #!/bin/bash
 
 #
-# helper for armv7h and armv6h clean-chroot builds
+# helper for Arch ARM clean-chroot builds
 #
 # Expects distcc using distccd-alarm (AUR) to be setup and running on server
 # as well as NFS export on server to be present
 #
 
-# mount point on the RPi3 for building which is expected to be an nfs export
+# mount point on the RPi for building which is expected to be an nfs export
 MOUNTPOINT=/scratch
 
 # the servername exporting the nfs build space
 SERVER=ease.lan
-EXPORT=/exported/path
 
-# this is your username
-USER=foo
+# regular user
+USER=$(whoami)
 
 setup() {
   # sanity checks
@@ -25,20 +24,11 @@ setup() {
   done
 
   [[ ! -d "$MOUNTPOINT/armc$NUMBER" ]] && mkdir "$MOUNTPOINT/armc$NUMBER"
-  systemctl is-active -q distccd-armv"${NUMBER}"h || systemctl start distccd-armv"${NUMBER}"h
 
   # If the root isn't present make it
   if [[ ! -d "$MOUNTPOINT/armc$NUMBER/root" ]]; then
     echo "--> No chroot detected so build one..."
-    runuser -l "$USER" -c "mkarchroot -C $PACMANCONF -c $CACHEDIR $MOUNTPOINT/armc$NUMBER/root base-devel distcc" || exit 1
-
-    sed -i -e 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j10"/' \
-      -i -e '/^BUILDENV=/ s,!dist,dist,' \
-      -i -e "/^#DISTCC_HOSTS=/ s,\",\"10.9.8.228:$PORT," \
-      -i -e "s/^#DIS/DIS/" \
-      -i -e 's/-fstack-protector-strong //g' \
-      -i -e 's/#PACKAGER="John Doe <john@doe.com>"/PACKAGER="graysky <graysky AT archlinux DOT us>"/' \
-      -i -e '/^PKGEXT=/ s,tar.xz,tar,' "$MOUNTPOINT/armc$NUMBER/root/etc/makepkg.conf" || exit 1
+    runuser -l "$USER" -c "mkarchroot -M $MAKC -c $CACHEDIR $MOUNTPOINT/armc$NUMBER/root base-devel distcc" || exit 1
 
     # use our mirrorlist
     cp /etc/pacman.d/mirrorlist "$MOUNTPOINT"/armc"$NUMBER"/root/etc/pacman.d
@@ -47,23 +37,13 @@ setup() {
     echo "--> Found a chroot so updating it..."
     runuser -l "$USER" -c "arch-nspawn -c $CACHEDIR -C /tmp/pac$NUMBER.conf $MOUNTPOINT/armc$NUMBER/root pacman -Syu --noconfirm"
   fi
-
-  # makechrootpkg uses flock to manage copies so the comments shit doesnt work right
-  # edit /usr/bin/makechrootpkg on the RPi3 to use the bwlimited rsync copy command
-  # to avoid the bug: https://github.com/raspberrypi/linux/issues/2788
-  #
-  # I don't know of a better way
-  #
-  # script on RPi3 = /usr/bin/makechrootpkg
-  #   in the script: rsync -a --delete -q -W -x "$rootdir/" "$copydir"
-  #   change it to: rsync -a --delete -W -x --info=progress2 --info=name0 --bwlimit=9000 "$rootdir/" "$copydir"
 }
 
 usage() {
   echo
   echo " --> all setup!"
   echo " --> cd $MOUNTPOINT/path/to/PKGBUILD"
-  echo " --> MAKEFLAGS=-j10 makechrootpkg -C $CACHEDIR -r $MOUNTPOINT/armc$NUMBER"
+  echo " --> MAKEFLAGS=-j16 makechrootpkg -r $MOUNTPOINT/armc$NUMBER"
 }
 
 if [ $UID != "0" ]; then
@@ -71,26 +51,23 @@ if [ $UID != "0" ]; then
   exit 1
 fi
 
-# maximum effort ... might need to adjust depending on your hardware
-[[ -f /sys/devices/system/cpu/cpufreq/policy0/scaling_governor ]] &&
-  echo performance > /sys/devices/system/cpu/cpufreq/policy0/scaling_governor
-
-if ! mountpoint -q "$MOUNTPOINT"; then
-  mount "$SERVER:$EXPORT" "$MOUNTPOINT" || exit 1
-fi
-
 case "$1" in
-  6) export NUMBER=6 PORT=3634 PACMANCONF=/tmp/pac6.conf CACHEDIR=/var/cache/pacman/pkg6
+  6) export NUMBER=6 PORT=3634 PACMANCONF=/tmp/pac6.conf CACHEDIR=/var/cache/pacman/pkg6 MAKC=~/bin/makepkg.armv6h
     sed -e '/Architecture =/ s,7h,6h,' /etc/pacman.conf > /tmp/pac6.conf
     setup
     usage
     ;;
-  7) export NUMBER=7 PORT=3635 PACMANCONF=/tmp/pac7.conf CACHEDIR=/var/cache/pacman/pkg
+  7) export NUMBER=7 PORT=3635 PACMANCONF=/tmp/pac7.conf CACHEDIR=/var/cache/pacman/pkg MAKC=~/bin/makepkg.armv7h
     cp /etc/pacman.conf /tmp/pac7.conf
     setup
     usage
     ;;
-  *) echo "usage: $0 {6,7}" ;;
+  8) export NUMBER=8 PORT=3636 PACMANCONF=/tmp/pac8.conf CACHEDIR=/var/cache/pacman/pkg MAKC=~/bin/makepkg.armv8
+    cp /etc/pacman.conf /tmp/pac8.conf
+    setup
+    usage
+    ;;
+  *) echo "usage: $0 {6,7,8}" ;;
 esac
 exit 0
 # vim:set ts=2 sw=2 et:

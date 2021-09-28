@@ -5,21 +5,21 @@
 # user must have 32-bit chroot setup and configured or else the i686 build will fail
 [[ ! -f "$HOME"/bin/pretty ]] && echo "missing $HOME/bin/pretty" && exit 1
 . "$HOME"/bin/pretty
-NAME=serenity.lan
+NAME=10.9.8.1
 temprepo="/scratch/router"
 archive=zst
 
 deploy() {
   for pkg in "${pkgname[@]}"; do
     # delete old pkg versions from repo
-    rm -f $temprepo/x86_64/"$pkg"*.pkg.tar.$archive
+    rm -f $temprepo/"$pkg"*.pkg.tar.$archive
 
     # move in the new version to the repo
-    mv "$pkg"*.pkg.tar.$archive "$temprepo/x86_64"
+    mv "$pkg"*.pkg.tar.$archive "$temprepo"
   done
 
   stat_busy "Reindexing repo"
-  if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.$archive &>/dev/null; then
+  if ! repo-add "$temprepo"/router.db.tar.xz "$temprepo"/*.pkg.tar.$archive &>/dev/null; then
     stat_die
   else
     true
@@ -27,7 +27,7 @@ deploy() {
   fi
 
   stat_busy "Rsyncing x86_64 back to router"
-  if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+  if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo"/ $NAME::repo/ &>/dev/null; then
     stat_die
   else
     true
@@ -38,7 +38,6 @@ deploy() {
 chrootbuild64() {
   sudo ccm64 S || stat die
 }
-
 # here is the script
 start=$(pwd)
 [[ ! -d "$temprepo" ]] && mkdir -p "$temprepo"
@@ -73,13 +72,13 @@ if [[ -f PKGBUILD ]]; then
         deploy
     esac
 else
-  echo "Add or remove packages from $temprepo/x86_64"
+  echo "Add or remove packages from $temprepo"
   read -r -p "Then hit any key to reindex and resync back." response
   case "$response" in
     *)
       stat_busy "Reindexing x86_64 repo"
-      rm -f "$temprepo"/x86_64/router*
-      if ! repo-add "$temprepo"/x86_64/router.db.tar.xz "$temprepo"/x86_64/*.pkg.tar.$archive &>/dev/null; then
+      rm -f "$temprepo"/router*
+      if ! repo-add "$temprepo"/router.db.tar.xz "$temprepo"/*.pkg.tar.$archive &>/dev/null; then
         stat_die
       else
         true
@@ -87,7 +86,7 @@ else
       fi
 
       stat_busy "Rsyncing x86_64 back to router"
-      if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo/x86_64"/ $NAME::repo/"x86_64"/ &>/dev/null; then
+      if ! rsync -trLxDu --delete-after --password-file ~/bin/makepkg/.generic "$temprepo"/ $NAME::repo/ &>/dev/null; then
         stat_die
       else
         true
