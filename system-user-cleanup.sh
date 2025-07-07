@@ -24,8 +24,8 @@ findem() {
   # all users defined
   mapfile -t passwd < <(awk -F: '{ print $1 }' /etc/passwd| sort)
 
-  # users to keep
-  mapfile -t keep < <(awk -F: '$3 >= 1000 { print $1 }' /etc/passwd)
+  # keep all users with uid >= 1000 except for 65534 which is hard coded as nobody
+  mapfile -t keep < <(awk -F: '$3 >= 1000 && $3 != 65534 { print $1 }' /etc/passwd)
   keep+=(root)
 
   # users to delete
