@@ -132,7 +132,7 @@ doit() {
     echo -e "$RED >>> must run this as root"$NRM
     exit 1
   else
-    for i in "${delete[@]/%/ }"; do
+    for i in "${delete[@]}"; do
       userdel "$i"
     done
     systemd-sysusers
