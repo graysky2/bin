@@ -1,9 +1,9 @@
 #!/bin/bash
-BLD="\e[01m"
-RED="\e[01;31m"
-GRN="\e[01;32m"
-YLW="\e[01;33m"
-NRM="\e[00m"
+BLD="\033[01m"
+RED="\033[01;31m"
+GRN="\033[01;32m"
+YLW="\033[01;33m"
+NRM="\033[00m"
 
 if (command -v fc-list >/dev/null 2>&1 && fc-list | grep -qi emoji) || 
   (printf "✅" 2>/dev/null | grep -q "✅" 2>/dev/null); then
@@ -18,11 +18,11 @@ is_empty() {
   files=("$1"/*)
   shopt -u nullglob dotglob
   [[ ${#files[@]} -eq 0 ]]
-  }
+}
 
 findem() {
   # all users defined
-  mapfile -t passwd < <(awk -F: '{ print $1 }' /etc/passwd| sort)
+  mapfile -t passwd < <(awk -F: '{ print $1 }' /etc/passwd | sort)
 
   # keep all users with uid >= 1000 except for 65534 which is hard coded as nobody
   mapfile -t keep < <(awk -F: '$3 >= 1000 && $3 != 65534 { print $1 }' /etc/passwd)
@@ -55,8 +55,8 @@ findem() {
   fi
 
   # differences and orphaned users
-  mapfile -t recreate< <(comm -12 <(printf '%s\n' "${defined[@]}") <(printf '%s\n' "${delete[@]}"))
-  mapfile -t orphaned< <(comm -13 <(printf '%s\n' "${defined[@]}") <(printf '%s\n' "${delete[@]}"))
+  mapfile -t recreate < <(comm -12 <(printf '%s\n' "${defined[@]}") <(printf '%s\n' "${delete[@]}"))
+  mapfile -t orphaned < <(comm -13 <(printf '%s\n' "${defined[@]}") <(printf '%s\n' "${delete[@]}"))
 }
 
 report() {
@@ -66,70 +66,66 @@ report() {
     local line_length=5  # Start at 5 for initial indent
     local max_length=80
     local first_item=true
-    echo -n "     "  # Initial 5-space indent
+    printf "     "  # Initial 5-space indent
     for item in "${arr[@]}"; do
       if [[ "$first_item" == true ]]; then
-        echo -n "$item"
+        printf "%s" "$item"
         line_length=$((5 + ${#item}))
-          first_item=false
-        elif (( line_length + ${#item} + 1 > max_length )); then
-          echo
-          echo -n "     $item"
-          line_length=$((5 + ${#item}))
-          else
-            echo -n " $item"
-            line_length=$((line_length + ${#item} + 1))
+        first_item=false
+      elif (( line_length + ${#item} + 1 > max_length )); then
+        printf "\n     %s" "$item"
+        line_length=$((5 + ${#item}))
+      else
+        printf " %s" "$item"
+        line_length=$((line_length + ${#item} + 1))
       fi
     done
   }
 
-echo -e "$BLD >>> Users to be kept:"$NRM
-format_array keep
-echo
-echo
-echo -e "$RED >>> Users to be deleted:"$NRM
-format_array delete
-echo
-echo
-if [[ -n "${defined[*]}" ]]; then
-  echo -e "$GRN >>> Users to be recreated:"$NRM
-  format_array recreate
-  echo
-fi
-if [[ -n "${orphaned[*]}" ]]; then
-  echo
-  echo -e "$YLW >>> Users to who have been orphaned by non-present packages:"$NRM
-  format_array orphaned
-  echo
-  echo
-  # Check if any orphaned users have valid home directories before showing the header
-  has_homedirs=false
-  for user in "${orphaned[@]}"; do
-    homedir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
-    if [[ -n "$homedir" && "$homedir" != "/" ]] && [[ -d "$homedir" || $(is_empty "$homedir"; echo $?) -ne 2 ]]; then
-      has_homedirs=true
-      break
-    fi
-  done
-
-  if [[ "$has_homedirs" == true ]]; then
-    echo -e "$YLW >>> Consider removing the following orphaned home directories:"$NRM
+  printf "${BLD}>>> Users to be kept:${NRM}\n"
+  format_array keep
+  printf "\n\n"
+  printf "${RED}>>> Users to be deleted:${NRM}\n"
+  format_array delete
+  printf "\n\n"
+  if [[ -n "${defined[*]}" ]]; then
+    printf "${GRN}>>> Users to be recreated:${NRM}\n"
+    format_array recreate
+    printf "\n"
+  fi
+  if [[ -n "${orphaned[*]}" ]]; then
+    printf "\n"
+    printf "${YLW}>>> Users who have been orphaned by non-present packages:${NRM}\n"
+    format_array orphaned
+    printf "\n\n"
+    # Check if any orphaned users have valid home directories before showing the header
+    has_homedirs=false
     for user in "${orphaned[@]}"; do
       homedir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
-      [ -n "$homedir" ] && [ "$homedir" != "/" ] || continue
-      if is_empty "$homedir"; then
-        echo "     $EMPTY $user: $homedir (empty)"
-      elif [ -d "$homedir" ]; then
-        echo "     $FILES $user: $homedir (has files)"
+      if [[ -n "$homedir" && "$homedir" != "/" ]] && [[ -d "$homedir" || $(is_empty "$homedir"; echo $?) -ne 2 ]]; then
+        has_homedirs=true
+        break
       fi
     done
+
+    if [[ "$has_homedirs" == true ]]; then
+      printf "${YLW}>>> Consider removing the following orphaned home directories:${NRM}\n"
+      for user in "${orphaned[@]}"; do
+        homedir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
+        [ -n "$homedir" ] && [ "$homedir" != "/" ] || continue
+        if is_empty "$homedir"; then
+          printf "     %s %s: %s (empty)\n" "$EMPTY" "$user" "$homedir"
+        elif [ -d "$homedir" ]; then
+          printf "     %s %s: %s (has files)\n" "$FILES" "$user" "$homedir"
+        fi
+      done
+    fi
   fi
-fi
 }
 
 doit() {
   if [[ $EUID -ne 0 ]]; then
-    echo -e "$RED >>> must run this as root"$NRM
+    printf "${RED}>>> must run this as root${NRM}\n"
     exit 1
   else
     for i in "${delete[@]}"; do
@@ -157,5 +153,5 @@ Usage: $0 {show|delete}
  show:   information output
  delete: delete and recreate users (requires root and will delete users!)
 EOF
-;;
+    ;;
 esac
