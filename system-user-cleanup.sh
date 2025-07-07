@@ -145,6 +145,11 @@ case "$1" in
     ;;
   d|D|delete|Delete)
     findem && doit
+    cat <<EOF
+>>> Manually inspect the ownership on dirs in /var/lib/ to insure parity with
+    potentially changed UID/GID values. For example /var/lib/libuuid should be
+    owned by uuidd:uuidd so chown -R uuidd:uuidd /var/lib/libuuid and so on.
+EOF
     ;;
   *)
     cat << EOF
