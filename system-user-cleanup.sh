@@ -3,9 +3,9 @@ BLD="\033[01m" RED="\033[01;31m" GRN="\033[01;32m" YLW="\033[01;33m" NRM="\033[0
 
 if (command -v fc-list >/dev/null 2>&1 && fc-list | grep -qi emoji) || 
   (printf "✅" 2>/dev/null | grep -q "✅" 2>/dev/null); then
-EMPTY="✅"; FILES="📁"
+EMPTY="✅"; FILES="📁"; LOCKED="🔒"; UNLOCKED="🔓"
 else
-  EMPTY="✓"; FILES="✗"
+  EMPTY="✓"; FILES="✗"; LOCKED="[L]"; UNLOCKED="[U]"
 fi
 
 is_empty() {
@@ -44,20 +44,20 @@ format_two_columns() {
   local col2_title="$4"
   local max_col1_width=0
   local max_col2_width=0
-  
+
   # Find max width for each column
   for item in "${col1[@]}"; do
     if [[ ${#item} -gt $max_col1_width ]]; then
       max_col1_width=${#item}
     fi
   done
-  
+
   for item in "${col2[@]}"; do
     if [[ ${#item} -gt $max_col2_width ]]; then
       max_col2_width=${#item}
     fi
   done
-  
+
   # Ensure minimum width for headers
   if [[ ${#col1_title} -gt $max_col1_width ]]; then
     max_col1_width=${#col1_title}
@@ -65,7 +65,7 @@ format_two_columns() {
   if [[ ${#col2_title} -gt $max_col2_width ]]; then
     max_col2_width=${#col2_title}
   fi
-  
+
   # Print headers
   printf "     %-${max_col1_width}s  %-${max_col2_width}s\n" "$col1_title" "$col2_title"
   printf "     "
@@ -73,35 +73,35 @@ format_two_columns() {
   printf "  "
   for ((i=0; i<max_col2_width; i++)); do printf "-"; done
   printf "\n"
-  
+
   # Print rows
   local max_rows=${#col1[@]}
-  if [[ ${#col2[@]} -gt $max_rows ]]; then
-    max_rows=${#col2[@]}
-  fi
-  
-  for ((i=0; i<max_rows; i++)); do
-    local item1="${col1[i]:-}"
-    local item2="${col2[i]:-}"
-    printf "     %-${max_col1_width}s  %-${max_col2_width}s\n" "$item1" "$item2"
-  done
-}
+    if [[ ${#col2[@]} -gt $max_rows ]]; then
+      max_rows=${#col2[@]}
+    fi
+
+    for ((i=0; i<max_rows; i++)); do
+      local item1="${col1[i]:-}"
+      local item2="${col2[i]:-}"
+      printf "     %-${max_col1_width}s  %-${max_col2_width}s\n" "$item1" "$item2"
+    done
+  }
 
 is_account_expired() {
   local user="$1"
   local expire_date
-  
+
   # Get the account expiration date from /etc/shadow
   expire_date=$(getent shadow "$user" 2>/dev/null | cut -d: -f8)
-  
+
   # If no expiration date is set, account is not expired
   if [[ -z "$expire_date" || "$expire_date" == "" ]]; then
     return 1
   fi
-  
+
   # Convert days since epoch to current date
   local current_days=$(( $(date +%s) / 86400 ))
-  
+
   # If expire_date is less than current_days, account is expired
   if [[ "$expire_date" -lt "$current_days" ]]; then
     return 0
@@ -156,23 +156,23 @@ findem() {
 }
 
 report() {
-  printf "${BLD}>>> Users to be kept:${NRM}\n"
+  echo -e "${BLD}>>> Users to be kept:${NRM}"
   format_array keep
   printf "\n\n"
-  printf "${RED}>>> Users to be deleted:${NRM}\n"
+  echo -e "${RED}>>> Users to be deleted:${NRM}"
   format_array delete
   printf "\n\n"
   if [[ -n "${defined[*]}" ]]; then
-    printf "${GRN}>>> Users to be recreated based on what is present in sysuser.d files:${NRM}\n"
+    echo -e "${GRN}>>> Users to be recreated based on what is present in sysuser.d files:${NRM}"
     format_array recreate
     printf "\n"
   fi
   if [[ -n "${orphaned[*]}" ]]; then
     printf "\n"
-    printf "${YLW}>>> Users that have been orphaned by non-present packages:${NRM}\n"
+    echo -e "${YLW}>>> Users that have been orphaned by non-present packages:${NRM}"
     format_array orphaned
     printf "\n\n"
-    
+
     has_homedirs=false
     for user in "${orphaned[@]}"; do
       homedir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
@@ -182,7 +182,7 @@ report() {
       fi
     done
     if [[ "$has_homedirs" == true ]]; then
-      printf "${YLW}>>> Consider removing the following orphaned home directories:${NRM}\n"
+      echo -e "${YLW}>>> Consider removing the following orphaned home directories:${NRM}"
       for user in "${orphaned[@]}"; do
         homedir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
         [ -n "$homedir" ] && [ "$homedir" != "/" ] || continue
@@ -197,9 +197,9 @@ report() {
 }
 
 report2() {
-  if [[ -n "${varlibquestion[@]}" ]]; then
+  if [[ -n "${varlibquestion[*]}" ]]; then
     printf "\n"
-    printf "${YLW}>>> Dirs which may or may not be homedirs for manual review:${NRM}\n"
+    echo -e "${YLW}>>> Dirs which may or may not be homedirs for manual review:${NRM}"
     for dirname in "${varlibquestion[@]}"; do
       [ -n "$dirname" ] && [ "$dirname" != "/" ] || continue
       if is_empty "$dirname"; then
@@ -212,33 +212,34 @@ report2() {
 }
 
 lockedstatus() {
+  if [[ $EUID -ne 0 ]]; then
+    echo -e "${RED}>>> $0 must run this as root for this function${NRM}"
+    exit 1
+  fi
+
   if [[ -n "${delete[*]}" ]]; then
     printf "\n"
-    printf "${YLW}>>> User account locked/expired status:${NRM}\n"
-    
-    if [[ $EUID -eq 0 ]]; then
-      expired_users=()
-      active_users=()
-      
-      for user in "${delete[@]}"; do
-        if is_account_expired "$user"; then
-          expired_users+=("$user")
-        else
-          active_users+=("$user")
-        fi
-      done
-      
-      format_two_columns expired_users active_users "Expired" "Active"
-    else
-      printf "     ${RED}Run as root to check account expiration status${NRM}\n"
-    fi
+    echo -e "${YLW}>>> User account locked/expired status:${NRM}"
+
+    expired_users=()
+    active_users=()
+
+    for user in "${delete[@]}"; do
+      if is_account_expired "$user"; then
+        expired_users+=("$user")
+      else
+        active_users+=("$user")
+      fi
+    done
+
+    format_two_columns expired_users active_users "$LOCKED Locked/Expired" "$UNLOCKED Unlocked/active"
     printf "\n"
   fi
 }
 
 doit() {
   if [[ $EUID -ne 0 ]]; then
-    printf "${RED}>>> must run this as root${NRM}\n"
+    echo -e "${RED}>>> $0 must run this as root for this function${NRM}"
     exit 1
   else
     for i in "${delete[@]}"; do
